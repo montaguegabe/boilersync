@@ -216,6 +216,26 @@ def pull_children(boilersync_path: Path, include_starter: bool = False) -> None:
         os.chdir(original_cwd)
 
 
+def get_template_config(template_dir: Path) -> dict[str, Any]:
+    """Get the template.json configuration if it exists.
+
+    Args:
+        template_dir: The template directory to check
+
+    Returns:
+        The template configuration dict, or empty dict if not found
+    """
+    template_json_path = template_dir / "template.json"
+    if not template_json_path.exists():
+        return {}
+
+    try:
+        with open(template_json_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, KeyError):
+        return {}
+
+
 def get_parent_template(template_dir: Path) -> str | None:
     """Get the parent template name from template.json if it exists.
 
@@ -225,16 +245,9 @@ def get_parent_template(template_dir: Path) -> str | None:
     Returns:
         The parent template name if found, None otherwise
     """
-    template_json_path = template_dir / "template.json"
-    if not template_json_path.exists():
-        return None
-
-    try:
-        with open(template_json_path, "r", encoding="utf-8") as f:
-            template_data = json.load(f)
-        return template_data.get("parent")
-    except (json.JSONDecodeError, KeyError):
-        return None
+    config = get_template_config(template_dir)
+    # Support both "extends" and "parent" keys for backwards compatibility
+    return config.get("extends") or config.get("parent")
 
 
 def get_template_inheritance_chain(
@@ -277,6 +290,23 @@ def get_template_inheritance_chain(
     # Recursively get parent chain and append this template
     parent_chain = get_template_inheritance_chain(parent_name, visited.copy())
     return parent_chain + [template_name]
+
+
+def should_skip_git(inheritance_chain: list[str]) -> bool:
+    """Check if any template in the inheritance chain has skip_git: true.
+
+    Args:
+        inheritance_chain: List of template names in inheritance order
+
+    Returns:
+        True if any template has skip_git: true, False otherwise
+    """
+    for template_name in inheritance_chain:
+        template_dir = paths.boilerplate_dir / template_name
+        config = get_template_config(template_dir)
+        if config.get("skip_git", False):
+            return True
+    return False
 
 
 def pull(
@@ -464,7 +494,8 @@ def pull(
     logger.info("📁 Created .boilersync file to track template origin")
 
     # Initialize git repo and commit if include_starter is True and .git doesn't exist
-    if include_starter:
+    # Skip if any template in the inheritance chain has skip_git: true
+    if include_starter and not should_skip_git(inheritance_chain):
         git_dir = target_dir / ".git"
         if not git_dir.exists():
             logger.info("\n🔧 Initializing git repository...")
