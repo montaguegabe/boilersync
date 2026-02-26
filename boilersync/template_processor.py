@@ -154,6 +154,9 @@ def copy_and_process_template(
     def process_item(src_path: Path, dst_path: Path) -> None:
         """Recursively process files and directories."""
         if src_path.is_file():
+            if src_path.name == "template.json":
+                return
+
             # Interpolate the destination file name
             interpolated_name = interpolate_path_name(dst_path.name, context)
 

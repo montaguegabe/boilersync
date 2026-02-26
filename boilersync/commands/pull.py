@@ -95,7 +95,7 @@ def scan_template_for_variables_excluding_starter(source_dir: Path) -> Set[str]:
 
 
 def copy_and_process_template_excluding_starter(
-    source_dir: Path, target_dir: Path, context: dict[str, Any], no_input: bool
+    source_dir: Path, target_dir: Path, context: dict[str, Any]
 ) -> None:
     """Copy template directory and process files, excluding starter files.
 
@@ -115,6 +115,9 @@ def copy_and_process_template_excluding_starter(
     def process_item(src_path: Path, dst_path: Path) -> None:
         """Recursively process files and directories, excluding starter files."""
         if src_path.is_file():
+            if src_path.name == "template.json":
+                return
+
             # Skip starter files
             if is_starter_file(src_path):
                 return
@@ -130,7 +133,7 @@ def copy_and_process_template_excluding_starter(
             shutil.copy2(src_path, final_dst_path)
 
             # Process the file content with Jinja2
-            process_template_file(final_dst_path, context, no_input=no_input)
+            process_template_file(final_dst_path, context)
 
         elif src_path.is_dir():
             # Interpolate the destination directory name
@@ -169,7 +172,7 @@ def process_template_directory_excluding_starter(
     # Now process the template with the complete context (excluding starter files)
     context = interpolation_context.get_context()
     copy_and_process_template_excluding_starter(
-        template_dir, target_dir, context, no_input=no_input
+        template_dir, target_dir, context
     )
 
 

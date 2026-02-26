@@ -228,3 +228,51 @@ MyAwesomeProject/
 │   └── getting-started.md
 └── package.json
 ```
+
+### Workspace Composition and Hooks
+
+`template.json` can define children and hooks so one template can scaffold a full workspace.
+
+Example:
+
+```json
+{
+  "extends": "base-template",
+  "skip_git": true,
+  "children": [
+    {
+      "template": "pip-package",
+      "path": "$${name_kebab}-api",
+      "variables": {
+        "package_description": "Generated for $${name_pretty}"
+      }
+    },
+    {
+      "template": "react-app",
+      "path": "$${name_kebab}-react",
+      "condition": "with_frontend"
+    }
+  ],
+  "hooks": {
+    "post_init": [
+      {
+        "id": "sync-workspace",
+        "run": "multi sync"
+      }
+    ]
+  },
+  "github": {
+    "create_repo": true,
+    "repo_name": "$${name_kebab}",
+    "private": true,
+    "condition": "with_github"
+  }
+}
+```
+
+Notes:
+
+- `children` are initialized after the parent template and registered in the parent `.boilersync`.
+- `condition` supports simple truthy/equality checks against runtime variables/options.
+- `hooks.pre_init` and `hooks.post_init` run shell commands in the target directory.
+- `github.create_repo` uses `gh` to create the repository if it does not already exist.
