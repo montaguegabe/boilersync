@@ -11,6 +11,7 @@ BoilerSync works as a small ensemble of tools:
 - Editor integration (Cursor/VS Code extension workflows) for fast editing and context switching.
 
 For the full workflow guide, read [docs/ensemble.md](docs/ensemble.md).
+For template metadata reference, read [docs/template-metadata.md](docs/template-metadata.md).
 
 ## Quick Start
 

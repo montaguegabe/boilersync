@@ -11,6 +11,8 @@ This guide covers only:
 
 If auto-generated API docs are added in the future, link them from `README.md`; this guide does not include a hand-written API reference.
 
+For template `template.json` metadata fields and examples, see [template-metadata.md](template-metadata.md).
+
 ## Getting Started
 
 ### Prerequisites
