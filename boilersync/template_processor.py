@@ -1,3 +1,4 @@
+import re
 import shutil
 from pathlib import Path
 from typing import Any, Dict, Set
@@ -10,6 +11,9 @@ from boilersync.variable_collector import (
     create_jinja_environment,
     extract_variables_from_template_content,
 )
+
+
+PATH_NAME_VARIABLE_PATTERN = re.compile(r"\b(NAME_[A-Z0-9_]+)\b")
 
 
 def interpolate_path_name(path_name: str, context: Dict[str, Any]) -> str:
@@ -82,6 +86,20 @@ def process_file_extensions(file_name: str) -> str:
     return result
 
 
+def extract_variables_from_template_path(path: Path) -> Set[str]:
+    """Extract logical template variables referenced by a path name.
+
+    Path interpolation only supports uppercase ``NAME_*`` variables. This helper
+    converts them to their lowercase content-variable counterparts so callers can
+    treat name inputs consistently with the rest of the variable pipeline.
+    """
+    variables: Set[str] = set()
+    for segment in path.parts:
+        for match in PATH_NAME_VARIABLE_PATTERN.findall(segment):
+            variables.add(match.lower())
+    return variables
+
+
 def scan_template_for_variables(source_dir: Path) -> Set[str]:
     """Scan the entire template directory for variables in template content.
 
@@ -96,6 +114,9 @@ def scan_template_for_variables(source_dir: Path) -> Set[str]:
     def scan_item(path: Path) -> None:
         """Recursively scan files for template variables."""
         if path.is_file():
+            template_variables.update(
+                extract_variables_from_template_path(path.relative_to(source_dir))
+            )
             # Scan all files for template variables since all files are processed with Jinja2
             try:
                 content = path.read_text(encoding="utf-8")
@@ -105,6 +126,9 @@ def scan_template_for_variables(source_dir: Path) -> Set[str]:
                 # If we can't read the file (e.g., binary file), skip it
                 pass
         elif path.is_dir():
+            template_variables.update(
+                extract_variables_from_template_path(path.relative_to(source_dir))
+            )
             # Recursively scan directory contents
             for item in path.iterdir():
                 scan_item(item)

@@ -112,6 +112,19 @@ class TestTemplateInheritance(unittest.TestCase):
             [self._canonical_ref("parent"), self._canonical_ref("child")],
         )
 
+    def test_inheritance_chain_two_levels_with_relative_extends(self):
+        """Relative extends values should resolve within the same source repo."""
+        self.create_template_dir("parent")
+        child_dir = self.create_template_dir("child")
+        with open(child_dir / "template.json", "w", encoding="utf-8") as f:
+            json.dump({"extends": "parent"}, f)
+
+        chain = get_template_inheritance_chain(self._template_ref("child"))
+        self.assertEqual(
+            [item.ref for item in chain],
+            [self._canonical_ref("parent"), self._canonical_ref("child")],
+        )
+
     def test_inheritance_chain_three_levels(self):
         """Test inheritance chain for grandparent -> parent -> child."""
         self.create_template_dir("grandparent")

@@ -68,6 +68,56 @@ class TestTemplatesCommands(unittest.TestCase):
         refs = {template["template_ref"] for template in templates}
         self.assertIn("acme/platform#python/service", refs)
 
+    def test_list_local_templates_requires_template_json(self) -> None:
+        _write_template(
+            self.template_root_dir,
+            org="acme",
+            repo="platform",
+            subdir="with-metadata",
+            files={
+                "README.starter.md": "metadata template",
+                "src/main.py": "print('hello')\n",
+            },
+            config={},
+        )
+        _write_template(
+            self.template_root_dir,
+            org="acme",
+            repo="platform",
+            subdir="plain-template",
+            files={
+                "README.starter.md": "plain template",
+                "src/index.ts": "export const ok = true;\n",
+            },
+        )
+
+        templates = list_local_templates()
+        refs = {template["template_ref"] for template in templates}
+
+        self.assertIn("acme/platform#with-metadata", refs)
+        self.assertNotIn("acme/platform#plain-template", refs)
+        self.assertNotIn("acme/platform#with-metadata/src", refs)
+        self.assertNotIn("acme/platform#plain-template/src", refs)
+
+    def test_list_local_templates_uses_deepest_dir_without_parent_files(self) -> None:
+        _write_template(
+            self.template_root_dir,
+            org="acme",
+            repo="platform",
+            subdir="python/service",
+            files={
+                "README.starter.md": "nested template",
+                "src/main.py": "print('nested')\n",
+            },
+            config={},
+        )
+
+        templates = list_local_templates()
+        refs = {template["template_ref"] for template in templates}
+
+        self.assertIn("acme/platform#python/service", refs)
+        self.assertNotIn("acme/platform#python/service/src", refs)
+
     def test_get_template_details_returns_variables_and_options(self) -> None:
         _write_template(
             self.template_root_dir,
@@ -118,7 +168,8 @@ class TestTemplatesCommands(unittest.TestCase):
         self.assertTrue(variable_map["service_tier"]["required"])
         self.assertIn("region", variable_map)
         self.assertEqual(variable_map["region"]["choices"], ["us", "eu"])
-        self.assertNotIn("name_snake", variable_map)
+        self.assertIn("name_snake", variable_map)
+        self.assertIn("name_pretty", variable_map)
 
         self.assertIn("with_ci", option_map)
         self.assertEqual(option_map["with_ci"]["type"], "boolean")
@@ -138,14 +189,17 @@ class TestTemplatesCommands(unittest.TestCase):
                     [
                         "acme/platform#service",
                         "--non-interactive",
-                        "--name",
-                        "my_service",
+                        "--var",
+                        "name_snake=my_service",
                     ],
                 )
 
         self.assertEqual(result.exit_code, 0, result.output)
         self.assertTrue(mock_init.called)
         self.assertTrue(mock_init.call_args.kwargs["no_input"])
+        self.assertEqual(
+            mock_init.call_args.kwargs["template_variables"]["name_snake"], "my_service"
+        )
 
 
 if __name__ == "__main__":

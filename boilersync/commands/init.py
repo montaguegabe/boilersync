@@ -310,8 +310,6 @@ def init(
     collected_variables: dict[str, Any] | None = None,
     template_variables: dict[str, Any] | None = None,
     options: dict[str, Any] | None = None,
-    project_name: str | None = None,
-    pretty_name: str | None = None,
     no_input: bool = False,
     run_hooks: bool = True,
     run_children: bool = True,
@@ -345,8 +343,6 @@ def init(
         _recursive=False,
         collected_variables=normalized_template_variables,
         target_dir=target_dir,
-        project_name=project_name,
-        pretty_name=pretty_name,
         no_input=no_input,
     )
 
@@ -419,14 +415,14 @@ def init(
 
             child_project_name = child.get("name_snake")
             if child_project_name is not None:
-                child_project_name = _render_string(
+                child_variables["name_snake"] = _render_string(
                     str(child_project_name),
                     runtime_context,
                 )
 
             child_pretty_name = child.get("name_pretty")
             if child_pretty_name is not None:
-                child_pretty_name = _render_string(
+                child_variables["name_pretty"] = _render_string(
                     str(child_pretty_name),
                     runtime_context,
                 )
@@ -441,8 +437,6 @@ def init(
                 target_dir=child_target_dir,
                 template_variables=child_variables or None,
                 options=options,
-                project_name=child_project_name,
-                pretty_name=child_pretty_name,
                 no_input=no_input,
                 run_hooks=run_hooks,
                 run_children=run_children,
@@ -483,16 +477,6 @@ def parse_option(ctx, param, value: tuple[str, ...]) -> dict[str, Any]:
 @click.command(name="init")
 @click.argument("template_ref")
 @click.option(
-    "-n",
-    "--name",
-    "project_name",
-    help="Project name in snake_case (defaults to directory name)",
-)
-@click.option(
-    "--pretty-name",
-    help="Pretty display name for the project",
-)
-@click.option(
     "-v",
     "--var",
     "variables",
@@ -522,8 +506,6 @@ def parse_option(ctx, param, value: tuple[str, ...]) -> dict[str, Any]:
 )
 def init_cmd(
     template_ref: str,
-    project_name: str | None,
-    pretty_name: str | None,
     variables: dict[str, Any],
     runtime_options: dict[str, Any],
     monorepo: bool,
@@ -537,16 +519,14 @@ def init_cmd(
 
     This command only works in empty directories.
 
-    For non-interactive usage, provide --non-interactive, --name, and any required template variables:
+    For non-interactive usage, provide --non-interactive and any required template variables:
 
     \b
-      boilersync init your-org/your-templates#service --non-interactive --name my_project --var author_name="John Doe"
+      boilersync init your-org/your-templates#service --non-interactive --var name_snake=my_project --var author_name="John Doe"
     """
     init(
         template_ref,
         target_dir=Path.cwd(),
-        project_name=project_name,
-        pretty_name=pretty_name,
         template_variables=variables if variables else None,
         options=runtime_options if runtime_options else None,
         no_input=no_input,

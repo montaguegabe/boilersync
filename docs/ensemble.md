@@ -66,7 +66,7 @@ For the exact schema, see [project-metadata.md](project-metadata.md).
 Use for first-time project generation.
 
 - Requires an empty target directory
-- Supports `--name`, `--pretty-name`, `--var KEY=VALUE`, and non-interactive mode (`--non-interactive`, alias `--no-input`)
+- Supports `--var KEY=VALUE` for template inputs, including `name_snake` / `name_pretty`, and non-interactive mode (`--non-interactive`, alias `--no-input`)
 - Resolves source-qualified refs
 - Can run configured hooks and initialize child templates
 

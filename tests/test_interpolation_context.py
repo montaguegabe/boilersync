@@ -7,8 +7,20 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from git import Repo
+
 from boilersync.commands.init import init
 from boilersync.interpolation_context import interpolation_context
+
+
+def _commit_template_repo(repo_dir: Path) -> None:
+    repo = Repo.init(repo_dir)
+    with repo.config_writer() as config:
+        config.set_value("user", "name", "BoilerSync Tests")
+        config.set_value("user", "email", "tests@example.com")
+    repo.git.add(A=True)
+    if repo.is_dirty(untracked_files=True):
+        repo.index.commit("Update template fixtures")
 
 
 def _write_template(
@@ -22,7 +34,6 @@ def _write_template(
 ) -> None:
     repo_dir = template_root_dir / org / repo
     template_dir = repo_dir / subdir
-    (repo_dir / ".git").mkdir(parents=True, exist_ok=True)
     template_dir.mkdir(parents=True, exist_ok=True)
 
     if config is not None:
@@ -32,6 +43,8 @@ def _write_template(
         output_path = template_dir / relative_path
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(contents, encoding="utf-8")
+
+    _commit_template_repo(repo_dir)
 
 
 class TestInterpolationContextNameVariants(unittest.TestCase):
@@ -118,9 +131,11 @@ class TestDerivedNameVariantsInInit(unittest.TestCase):
         init(
             self._template_ref("workspace-template"),
             target_dir=target_dir,
-            project_name="demo_workspace",
             no_input=True,
-            template_variables={"api_package_name_snake": "demo_api"},
+            template_variables={
+                "name_snake": "demo_workspace",
+                "api_package_name_snake": "demo_api",
+            },
         )
 
         self.assertTrue((target_dir / "demo-api" / "child.txt").exists())

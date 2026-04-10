@@ -1,6 +1,6 @@
 # Template Metadata (`template.json`)
 
-BoilerSync templates can declare metadata in an optional `template.json` file at the template root.
+BoilerSync templates must include a `template.json` file at the template root.
 
 ## Overview
 
@@ -103,8 +103,18 @@ Unknown keys are ignored by current CLI commands.
 
 Notes:
 
-- `variables` are also auto-discovered from `$${...}` usage in template files.
-- Built-in naming variables (`name_snake`, `NAME_SNAKE`, etc.) are not listed as required user inputs.
+- `variables` are also auto-discovered from `$${...}` usage in template files and `NAME_*` path placeholders.
+- Built-in naming variables such as `name_snake` and `name_pretty` are exposed through the normal variable/input flow.
+
+Relative `extends` values are resolved within the same template source repository. Example:
+
+```json
+{
+  "extends": "pip-package"
+}
+```
+
+When used from `acme/templates#cli`, this resolves to `acme/templates#pip-package`.
 
 ### `children`
 
@@ -144,4 +154,3 @@ Notes:
 
 - Type: boolean.
 - Purpose: If `true` on any template in the inheritance chain, BoilerSync skips git initialization in generated projects.
-

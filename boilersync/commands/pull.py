@@ -10,6 +10,7 @@ from git import InvalidGitRepositoryError, Repo
 from boilersync.interpolation_context import interpolation_context
 from boilersync.names import normalize_to_snake, snake_to_pretty
 from boilersync.paths import paths
+from boilersync.project_metadata import write_project_metadata
 from boilersync.template_processor import process_template_directory
 from boilersync.template_sources import (
     TemplateSource,
@@ -66,6 +67,7 @@ def scan_template_for_variables_excluding_starter(source_dir: Path) -> set[str]:
     Returns:
         Set of template variables found in non-starter template files
     """
+    from boilersync.template_processor import extract_variables_from_template_path
     from boilersync.variable_collector import extract_variables_from_template_content
 
     template_variables = set()
@@ -73,6 +75,9 @@ def scan_template_for_variables_excluding_starter(source_dir: Path) -> set[str]:
     def scan_item(path: Path) -> None:
         """Recursively scan files for template variables, excluding starter files."""
         if path.is_file():
+            template_variables.update(
+                extract_variables_from_template_path(path.relative_to(source_dir))
+            )
             # Skip starter files
             if is_starter_file(path):
                 return
@@ -86,6 +91,9 @@ def scan_template_for_variables_excluding_starter(source_dir: Path) -> set[str]:
                 # If we can't read the file (e.g., binary file), skip it
                 pass
         elif path.is_dir():
+            template_variables.update(
+                extract_variables_from_template_path(path.relative_to(source_dir))
+            )
             # Recursively scan directory contents
             for item in path.iterdir():
                 scan_item(item)
@@ -256,6 +264,64 @@ def get_parent_template(template_dir: Path) -> str | None:
     return config.get("extends") or config.get("parent")
 
 
+def _resolve_parent_template_ref(
+    child_template_ref: str,
+    parent_template_ref: str,
+) -> str:
+    if "#" in parent_template_ref:
+        return parent_template_ref
+
+    if "#" not in child_template_ref:
+        raise ValueError(
+            "Relative parent templates require a source-qualified child template ref."
+        )
+
+    parent_repo_locator, _ = child_template_ref.split("#", 1)
+    parent_subdir = parent_template_ref.strip().lstrip("/")
+    if not parent_subdir:
+        raise ValueError("Parent template ref cannot be empty.")
+    return f"{parent_repo_locator}#{parent_subdir}"
+
+
+def _resolve_name_variables(
+    target_dir: Path,
+    *,
+    collected_variables: dict[str, Any] | None,
+    stored_name_snake: str | None = None,
+    stored_name_pretty: str | None = None,
+    no_input: bool,
+) -> tuple[dict[str, Any], str, str]:
+    variables = dict(collected_variables or {})
+
+    default_snake_name = normalize_to_snake(target_dir.name)
+    resolved_name_snake = str(
+        variables.get("name_snake")
+        or stored_name_snake
+        or prompt_or_default(
+            "Enter value for 'name_snake'",
+            default=default_snake_name,
+            type=str,
+            no_input=no_input,
+        )
+    )
+
+    default_pretty_name = snake_to_pretty(resolved_name_snake)
+    resolved_name_pretty = str(
+        variables.get("name_pretty")
+        or stored_name_pretty
+        or prompt_or_default(
+            "Enter value for 'name_pretty'",
+            default=default_pretty_name,
+            type=str,
+            no_input=no_input,
+        )
+    )
+
+    variables["name_snake"] = resolved_name_snake
+    variables["name_pretty"] = resolved_name_pretty
+    return variables, resolved_name_snake, resolved_name_pretty
+
+
 def get_template_inheritance_chain(
     template_ref: str, visited: set[str] | None = None
 ) -> list[TemplateSource]:
@@ -289,7 +355,8 @@ def get_template_inheritance_chain(
         return [source]
 
     # Recursively get parent chain and append this template
-    parent_chain = get_template_inheritance_chain(parent_ref, visited.copy())
+    resolved_parent_ref = _resolve_parent_template_ref(template_ref, parent_ref)
+    parent_chain = get_template_inheritance_chain(resolved_parent_ref, visited.copy())
     return parent_chain + [source]
 
 
@@ -312,8 +379,6 @@ def should_skip_git(inheritance_chain: list[TemplateSource]) -> bool:
 def pull(
     template_ref: str | None = None,
     *,
-    project_name: str | None = None,
-    pretty_name: str | None = None,
     collected_variables: dict[str, Any] | None = None,
     allow_non_empty: bool = False,
     include_starter: bool = False,
@@ -325,8 +390,6 @@ def pull(
 
     Args:
         template_ref: Template reference (auto-detected if None)
-        project_name: Optional predefined project name (snake_case)
-        pretty_name: Optional predefined pretty name
         collected_variables: Optional pre-collected variables to restore
         allow_non_empty: If True, allow pulling into non-empty directories (requires clean git repo)
         include_starter: If True, include starter files when pulling template changes
@@ -340,6 +403,8 @@ def pull(
     """
     target_dir = target_dir or Path.cwd()
 
+    stored_project_name: str | None = None
+    stored_pretty_name: str | None = None
     # Auto-detect template source from .boilersync file if not provided
     if template_ref is None:
         try:
@@ -351,10 +416,8 @@ def pull(
             )
             template_ref = template_source.canonical_ref
             # Also get the saved project details
-            if project_name is None:
-                project_name = boilersync_data.get("name_snake")
-            if pretty_name is None:
-                pretty_name = boilersync_data.get("name_pretty")
+            stored_project_name = boilersync_data.get("name_snake")
+            stored_pretty_name = boilersync_data.get("name_pretty")
             if collected_variables is None:
                 collected_variables = boilersync_data.get("variables", {})
             logger.info(
@@ -397,52 +460,23 @@ def pull(
                 )
             logger.info("⚠️  Pulling into non-empty directory (git repo is clean)")
 
-    # If project names are provided, use them; otherwise prompt user
-    if project_name is not None:
-        snake_name = project_name
-        # Auto-generate pretty name if not provided
-        final_pretty_name = (
-            pretty_name if pretty_name is not None else snake_to_pretty(project_name)
-        )
-        logger.info(f"\n🚀 Pulling from template '{leaf_template_ref}'")
-        logger.info(f"📝 Using project name: {snake_name}")
-        logger.info(f"📝 Using pretty name: {final_pretty_name}")
-    else:
-        # Get the default snake_case name from the directory
-        directory_name = target_dir.name
-        default_snake_name = normalize_to_snake(directory_name)
-        default_pretty_name = (
-            pretty_name
-            if pretty_name is not None
-            else snake_to_pretty(default_snake_name)
-        )
+    collected_variables, snake_name, final_pretty_name = _resolve_name_variables(
+        target_dir,
+        collected_variables=collected_variables,
+        stored_name_snake=stored_project_name,
+        stored_name_pretty=stored_pretty_name,
+        no_input=no_input,
+    )
 
-        # Prompt user for project names
-        logger.info(f"\n🚀 Pulling from template '{leaf_template_ref}'")
-        logger.info("=" * 50)
-
-        snake_name = prompt_or_default(
-            "Project name (snake_case)",
-            default=default_snake_name,
-            type=str,
-            no_input=no_input,
-        )
-
-        final_pretty_name = prompt_or_default(
-            "Pretty name for display",
-            default=default_pretty_name,
-            type=str,
-            no_input=no_input,
-        )
-
-        logger.info("=" * 50)
+    logger.info(f"\n🚀 Pulling from template '{leaf_template_ref}'")
+    logger.info(f"📝 Using project name: {snake_name}")
+    logger.info(f"📝 Using pretty name: {final_pretty_name}")
 
     # Set up interpolation context with project names
     interpolation_context.set_project_names(snake_name, final_pretty_name)
 
     # Restore any pre-collected variables
-    if collected_variables:
-        interpolation_context.set_collected_variables(collected_variables)
+    interpolation_context.set_collected_variables(collected_variables)
 
     # Process each template in the inheritance chain
     for i, template_source in enumerate(inheritance_chain):
@@ -471,18 +505,15 @@ def pull(
     # Get all collected variables to save them
     collected_variables = interpolation_context.get_collected_variables()
 
-    # Create .boilersync file to track template origin.
     boilersync_file = target_dir / ".boilersync"
     leaf_source = inheritance_chain[-1]
-    boilersync_data = {
-        "template": leaf_source.canonical_ref,
-        "name_snake": snake_name,
-        "name_pretty": final_pretty_name,
-        "variables": collected_variables,
-    }
-
-    with open(boilersync_file, "w", encoding="utf-8") as f:
-        json.dump(boilersync_data, f, indent=2)
+    write_project_metadata(
+        target_dir,
+        template_source=leaf_source,
+        name_snake=snake_name,
+        name_pretty=final_pretty_name,
+        variables=collected_variables,
+    )
 
     if has_files and allow_non_empty:
         logger.info(

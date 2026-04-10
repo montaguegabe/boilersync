@@ -9,6 +9,7 @@ This file is the source of truth for template provenance and saved interpolation
 ```json
 {
   "template": "https://github.com/acme/templates.git#python/service-template",
+  "template_commit": "abc123def4567890abc123def4567890abc123de",
   "name_snake": "my_service",
   "name_pretty": "My Service",
   "variables": {
@@ -35,11 +36,22 @@ This file is the source of truth for template provenance and saved interpolation
 
 - Type: `string`
 - Purpose: project identifier used for interpolation (`$${name_snake}`).
+- Notes: callers now pass this through the normal template variable interface (for example `--var name_snake=my_service`).
 
 ### `name_pretty` (required)
 
 - Type: `string`
 - Purpose: display name used for interpolation (`$${name_pretty}`).
+- Notes: callers now pass this through the normal template variable interface (for example `--var name_pretty="My Service"`).
+
+### `template_commit` (required for new projects)
+
+- Type: `string`
+- Purpose: the source template repository commit that the project last pulled from.
+- Notes:
+  - BoilerSync records the current HEAD commit of the cached template repository.
+  - `boilersync check-pull` compares this stored commit against the current cached template repo HEAD.
+  - Older projects may not have this field until they run `boilersync pull` again.
 
 ### `variables` (required)
 

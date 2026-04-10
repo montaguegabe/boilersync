@@ -31,17 +31,31 @@ DEFAULT_CONTEXT_VARIABLES = {
     "NAME_KEBAB",
     "NAME_CAMEL",
     "NAME_PRETTY",
-    "name_snake",
     "name_pascal",
     "name_kebab",
     "name_camel",
-    "name_pretty",
+}
+
+BUILT_IN_VARIABLE_DEFINITIONS = {
+    "name_snake": {
+        "name": "name_snake",
+        "label": "Project Name",
+        "type": "string",
+        "required": False,
+        "description": "Snake_case project name. Defaults to the target directory name.",
+    },
+    "name_pretty": {
+        "name": "name_pretty",
+        "label": "Pretty Name",
+        "type": "string",
+        "required": False,
+        "description": "Display name. Defaults to a prettified version of name_snake.",
+    },
 }
 
 
 def _iter_repo_template_subdirs(repo_dir: Path) -> list[str]:
-    template_json_dirs: list[str] = []
-    fallback_dirs: list[str] = []
+    template_dirs: list[str] = []
 
     for root, dir_names, file_names in os.walk(repo_dir):
         dir_names[:] = sorted(
@@ -61,13 +75,17 @@ def _iter_repo_template_subdirs(repo_dir: Path) -> list[str]:
         if not visible_files:
             continue
 
-        rel_str = str(rel_path).replace("\\", "/")
-        if "template.json" in visible_files:
-            template_json_dirs.append(rel_str)
-        else:
-            fallback_dirs.append(rel_str)
+        if "template.json" not in visible_files:
+            continue
 
-    return sorted(set(template_json_dirs or fallback_dirs))
+        rel_str = str(rel_path).replace("\\", "/")
+        template_dirs.append(rel_str)
+
+        # A template root is identified by template.json, so child directories
+        # should not be exposed as additional templates.
+        dir_names[:] = []
+
+    return sorted(set(template_dirs))
 
 
 def list_local_templates() -> list[dict[str, Any]]:
@@ -192,6 +210,8 @@ def get_template_details(template_ref: str) -> dict[str, Any]:
     variable_metadata = _merge_input_metadata(inheritance_chain, "variables")
     option_metadata = _merge_input_metadata(inheritance_chain, "options")
 
+    variable_names |= set(BUILT_IN_VARIABLE_DEFINITIONS.keys())
+
     variables: list[dict[str, Any]] = []
     for variable_name in sorted(variable_names | set(variable_metadata.keys())):
         definition = _normalize_input_definition(
@@ -199,6 +219,9 @@ def get_template_details(template_ref: str) -> dict[str, Any]:
             variable_metadata.get(variable_name),
             default_required=variable_name in variable_names,
         )
+        built_in_definition = BUILT_IN_VARIABLE_DEFINITIONS.get(variable_name)
+        if built_in_definition:
+            definition = {**definition, **built_in_definition}
         variables.append(definition)
 
     options: list[dict[str, Any]] = []
@@ -216,24 +239,6 @@ def get_template_details(template_ref: str) -> dict[str, Any]:
         "template_dir": str(leaf_source.template_dir),
         "template_root_dir": str(paths.template_root_dir),
         "inheritance_chain": [source.ref for source in inheritance_chain],
-        "project_fields": [
-            {
-                "name": "project_name",
-                "label": "Project Name",
-                "type": "string",
-                "required": False,
-                "description": "Snake_case project name passed to --name.",
-                "cli_flag": "--name",
-            },
-            {
-                "name": "pretty_name",
-                "label": "Pretty Name",
-                "type": "string",
-                "required": False,
-                "description": "Display name passed to --pretty-name.",
-                "cli_flag": "--pretty-name",
-            },
-        ],
         "variables": variables,
         "options": options,
     }
@@ -350,10 +355,6 @@ def templates_details_cmd(template_ref: str, json_output: bool) -> None:
 
     click.echo(f"Template: {details['template_ref']}")
     click.echo(f"Path: {details['template_dir']}")
-    click.echo("")
-    click.echo("Project fields:")
-    for field in details["project_fields"]:
-        click.echo(f"- {field['name']} ({field['cli_flag']})")
     click.echo("")
     click.echo("Variables:")
     if details["variables"]:

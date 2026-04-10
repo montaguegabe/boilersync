@@ -3,34 +3,61 @@ import json
 import shutil
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import click
 from git import Repo
 
+from boilersync.commands.pull import get_template_inheritance_chain
 from boilersync.paths import paths
 from boilersync.template_processor import process_file_extensions
-from boilersync.template_sources import resolve_source_from_boilersync
+from boilersync.template_sources import TemplateSource, resolve_source_from_boilersync
 
 
-def copy_template_without_interpolation(template_dir: Path, target_dir: Path) -> None:
+@dataclass(frozen=True)
+class TemplateOwnership:
+    template_ref: str
+    template_dir: Path
+    template_repo_dir: Path
+    source_relative_path: str
+
+
+def copy_template_without_interpolation(
+    template_source: TemplateSource,
+    target_dir: Path,
+    ownership_map: dict[str, TemplateOwnership],
+) -> None:
     """Copy template directory without any interpolation.
 
     Args:
-        template_dir: Source template directory
+        template_source: Source template metadata
         target_dir: Target directory to copy to
+        ownership_map: Mapping of rendered template paths to owning template sources
     """
+    template_dir = template_source.template_dir
 
     def copy_item(src_path: Path, dst_path: Path) -> None:
         """Recursively copy files and directories without interpolation."""
         if src_path.is_file():
+            if src_path.name == "template.json":
+                return
             # Process file extensions but don't interpolate names
             final_name = process_file_extensions(dst_path.name)
             final_dst_path = dst_path.parent / final_name
 
             # Copy the file without processing content
+            final_dst_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src_path, final_dst_path)
+            ownership_map[final_dst_path.relative_to(target_dir).as_posix()] = (
+                TemplateOwnership(
+                    template_ref=template_source.ref,
+                    template_dir=template_source.template_dir,
+                    template_repo_dir=template_source.local_repo_path,
+                    source_relative_path=src_path.relative_to(template_dir).as_posix(),
+                )
+            )
 
         elif src_path.is_dir():
             # Create directory without interpolating name
@@ -48,6 +75,28 @@ def copy_template_without_interpolation(template_dir: Path, target_dir: Path) ->
     for item in template_dir.iterdir():
         item_dst = target_dir / item.name
         copy_item(item, item_dst)
+
+
+def copy_template_chain_without_interpolation(
+    inheritance_chain: list[TemplateSource],
+    target_dir: Path,
+) -> dict[str, TemplateOwnership]:
+    ownership_map: dict[str, TemplateOwnership] = {}
+    for template_source in inheritance_chain:
+        copy_template_without_interpolation(template_source, target_dir, ownership_map)
+    return ownership_map
+
+
+def template_file_contains_block_syntax(file_path: Path) -> bool:
+    try:
+        content = file_path.read_text(encoding="utf-8")
+    except Exception:
+        return False
+
+    return any(
+        token in content
+        for token in ("$${% block", "$${ super()", "$${% endblock", "$${% extends")
+    )
 
 
 def reverse_interpolate_path_name(path_name: str, context: Dict[str, Any]) -> str:
@@ -211,20 +260,20 @@ def reverse_interpolate_project_files(
 
 def copy_changed_files_to_template(
     temp_repo_dir: Path,
-    template_dir: Path,
-    template_name: str,
+    ownership_map: dict[str, TemplateOwnership],
+    leaf_template_source: TemplateSource,
     files_to_add: Optional[List[str]] = None,
-) -> List[str]:
+) -> tuple[List[str], set[Path]]:
     """Copy changed files from the temporary repo back to the template.
 
     Args:
         temp_repo_dir: Path to the temporary git repository
-        template_dir: Path to the original template directory
-        template_name: Name of the template
+        ownership_map: Mapping of template-style file paths to owning template metadata
+        leaf_template_source: Leaf template metadata for new files
         files_to_add: Optional list of additional files to copy from project root
 
     Returns:
-        List of files that were updated in the template
+        List of files that were updated in the template and the affected template repos
     """
     try:
         repo = Repo(temp_repo_dir)
@@ -260,7 +309,7 @@ def copy_changed_files_to_template(
 
         if not changed_files:
             click.echo("📝 No committed changes detected.")
-            return []
+            return [], set()
 
         click.echo(f"📋 Found {len(changed_files)} file(s) to process:")
         for file_path in changed_files:
@@ -269,27 +318,59 @@ def copy_changed_files_to_template(
             else:
                 click.echo(f"  • {file_path}")
 
+        blocked_files: list[tuple[str, Path]] = []
+        for file_path in changed_files:
+            source_file = temp_repo_dir / file_path
+            if not source_file.exists():
+                continue
+
+            ownership = ownership_map.get(
+                file_path,
+                TemplateOwnership(
+                    template_ref=leaf_template_source.ref,
+                    template_dir=leaf_template_source.template_dir,
+                    template_repo_dir=leaf_template_source.local_repo_path,
+                    source_relative_path=file_path,
+                ),
+            )
+            source_template_file = ownership.template_dir / ownership.source_relative_path
+            if source_template_file.exists() and template_file_contains_block_syntax(
+                source_template_file
+            ):
+                blocked_files.append((file_path, source_template_file))
+
+        if blocked_files:
+            blocked_summary = "\n".join(
+                f"- {file_path} (source: {source_template_file})"
+                for file_path, source_template_file in blocked_files
+            )
+            raise RuntimeError(
+                "Refusing to push files derived from block-based template sources "
+                "because BoilerSync cannot safely reconstruct the block structure:\n"
+                f"{blocked_summary}"
+            )
+
         updated_files = []
+        updated_template_repos: set[Path] = set()
 
         for file_path in changed_files:
             source_file = temp_repo_dir / file_path
-            target_file = template_dir / file_path
 
             # Skip if source file doesn't exist (deleted files)
             if not source_file.exists():
                 click.echo(f"⚠️  Skipping deleted file: {file_path}")
                 continue
 
-            # For all files, check if a .boilersync version exists and prefer that
-            boilersync_target = template_dir / f"{file_path}.boilersync"
-            if boilersync_target.exists():
-                # Use the .boilersync version as the target
-                final_target = boilersync_target
-                target_type = ".boilersync version"
-            else:
-                # Use the original target (without .boilersync suffix for new files)
-                final_target = target_file
-                target_type = "regular file"
+            ownership = ownership_map.get(
+                file_path,
+                TemplateOwnership(
+                    template_ref=leaf_template_source.ref,
+                    template_dir=leaf_template_source.template_dir,
+                    template_repo_dir=leaf_template_source.local_repo_path,
+                    source_relative_path=file_path,
+                ),
+            )
+            final_target = ownership.template_dir / ownership.source_relative_path
 
             # Create parent directories if they don't exist
             final_target.parent.mkdir(parents=True, exist_ok=True)
@@ -298,18 +379,21 @@ def copy_changed_files_to_template(
             try:
                 shutil.copy2(source_file, final_target)
                 updated_files.append(file_path)
-                if files_to_add and file_path in files_to_add:
-                    click.echo(f"✅ Added to template ({target_type}): {file_path}")
-                else:
-                    click.echo(f"✅ Updated ({target_type}): {file_path}")
+                updated_template_repos.add(ownership.template_repo_dir)
+                action = "Added to template" if files_to_add and file_path in files_to_add else "Updated"
+                click.echo(
+                    f"✅ {action} ({ownership.template_ref} -> {ownership.source_relative_path}): {file_path}"
+                )
             except Exception as e:
                 click.echo(f"❌ Failed to copy {file_path}: {e}")
 
-        return updated_files
+        return updated_files, updated_template_repos
 
     except Exception as e:
+        if isinstance(e, RuntimeError):
+            raise
         click.echo(f"❌ Error processing git changes: {e}")
-        return []
+        return [], set()
 
 
 def copy_additional_files_to_temp(
@@ -377,9 +461,9 @@ def push(files_to_add: Optional[List[str]] = None) -> None:
         template_source = resolve_source_from_boilersync(
             boilersync_data.get("template"),
         )
-        template_ref = template_source.canonical_ref
-        template_dir = template_source.template_dir
-        template_repo_dir = template_source.local_repo_path
+        inheritance_chain = get_template_inheritance_chain(template_source.canonical_ref)
+        leaf_template_source = inheritance_chain[-1]
+        template_ref = leaf_template_source.canonical_ref
         project_name = boilersync_data.get("name_snake")
         pretty_name = boilersync_data.get("name_pretty")
         collected_variables = boilersync_data.get("variables", {})
@@ -410,14 +494,17 @@ def push(files_to_add: Optional[List[str]] = None) -> None:
 
         os.chdir(project_temp_dir)
 
-        # Copy template without interpolation first
-        click.echo("📦 Copying fresh template without interpolation...")
-        if not template_dir.exists():
+        # Copy the full inheritance chain without interpolation first
+        click.echo("📦 Copying fresh template inheritance chain without interpolation...")
+        if not leaf_template_source.template_dir.exists():
             raise FileNotFoundError(
-                f"Template '{template_ref}' not found at {template_dir}"
+                f"Template '{template_ref}' not found at {leaf_template_source.template_dir}"
             )
 
-        copy_template_without_interpolation(template_dir, project_temp_dir)
+        ownership_map = copy_template_chain_without_interpolation(
+            inheritance_chain,
+            project_temp_dir,
+        )
 
         # Initialize git repo if it doesn't exist
         git_dir = project_temp_dir / ".git"
@@ -478,8 +565,11 @@ def push(files_to_add: Optional[List[str]] = None) -> None:
 
         # After user presses enter, copy changed files back to template
         click.echo("\n🔄 Processing committed changes to update template...")
-        updated_files = copy_changed_files_to_template(
-            project_temp_dir, template_dir, template_ref, files_to_add
+        updated_files, updated_template_repos = copy_changed_files_to_template(
+            project_temp_dir,
+            ownership_map,
+            leaf_template_source,
+            files_to_add,
         )
 
         if updated_files:
@@ -488,11 +578,13 @@ def push(files_to_add: Optional[List[str]] = None) -> None:
             )
             for file_path in updated_files:
                 click.echo(f"  • {file_path}")
-            click.echo(f"\n📁 Template location: {template_dir}")
+            for repo_dir in sorted(updated_template_repos):
+                click.echo(f"\n📁 Updated template repository: {repo_dir}")
 
-            # Open the template source repo in GitHub Desktop
-            click.echo("🚀 Opening template source repository in GitHub Desktop...")
-            subprocess.run(["github", str(template_repo_dir)], check=True)
+            # Open the affected template source repos in GitHub Desktop
+            for repo_dir in sorted(updated_template_repos):
+                click.echo(f"🚀 Opening template source repository in GitHub Desktop: {repo_dir}")
+                subprocess.run(["github", str(repo_dir)], check=True)
         else:
             click.echo("\n📝 No files were updated in the template.")
 
