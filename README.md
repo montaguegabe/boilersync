@@ -22,6 +22,11 @@ boilersync templates init https://github.com/your-org/your-templates.git
 # 2) Initialize a project from a source-qualified template ref
 boilersync init your-org/your-templates#python/service-template
 
+# Well-defaulted templates can be initialized without prompts
+mkdir my-app-workspace
+cd my-app-workspace
+boilersync init your-org/your-templates#python/service-template --non-interactive
+
 # 3) Pull template updates into the current project when needed
 boilersync pull
 
@@ -32,6 +37,7 @@ boilersync push
 ## Command Overview
 
 - `boilersync init TEMPLATE_REF`: create a project from a template (empty target directory).
+- `boilersync init TEMPLATE_REF --non-interactive`: create a project without prompts when defaults and automatic values cover all inputs.
 - `boilersync check-pull`: compare the project's recorded template repo commit against the current cached template repo HEAD.
 - `boilersync pull [TEMPLATE_REF]`: apply template updates to an existing project.
 - `boilersync push`: review and copy committed project changes back to the template.
@@ -73,8 +79,11 @@ For the field-by-field schema and validation rules, see [docs/project-metadata.m
 
 - Files ending in `.boilersync` are rendered and emitted without that extension.
 - Files with `.starter` as the first extension are starter-only files.
-- Every template root must include `template.json`, which supports inheritance (`extends`/`parent`), child templates, hooks, and optional GitHub repo creation.
+- Every template root must include `template.json`, which supports inheritance (`extends`/`parent`), defaults, child templates, hooks, and optional GitHub repo creation.
 - Project naming is provided through standard template variables such as `name_snake` and `name_pretty`.
+- `template.json` `defaults` can derive variables from naming values, such as `"api_package_name": "$${name_snake}_api"` or `"web_package_name": "$${name_kebab}-web"`.
+- Default project-name inference strips a trailing `-workspace` / `_workspace` suffix from the target directory name.
+- If a template references `github_user`, BoilerSync tries to populate it with `gh api user --jq .login` before prompting or failing in non-interactive mode.
 
 ## Documentation Policy
 

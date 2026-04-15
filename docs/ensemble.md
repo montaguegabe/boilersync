@@ -67,6 +67,9 @@ Use for first-time project generation.
 
 - Requires an empty target directory
 - Supports `--var KEY=VALUE` for template inputs, including `name_snake` / `name_pretty`, and non-interactive mode (`--non-interactive`, alias `--no-input`)
+- Uses `template.json` `defaults` before prompting, so well-defaulted templates can be bootstrapped with one command after creating and entering the target directory
+- Infers `name_snake` from the target directory and strips a trailing `-workspace` / `_workspace` suffix
+- Attempts to infer `github_user` from `gh api user --jq .login` when a template references `github_user`
 - Resolves source-qualified refs
 - Can run configured hooks and initialize child templates
 

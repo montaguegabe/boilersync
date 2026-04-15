@@ -57,7 +57,10 @@ This file is the source of truth for template provenance and saved interpolation
 
 - Type: `object`
 - Purpose: saved interpolation variables for repeatable `pull` and `push` flows.
-- Notes: keys/values are template-specific.
+- Notes:
+  - Keys/values are template-specific.
+  - Values populated from `template.json` `defaults` are stored here after init or pull.
+  - Explicit values such as `--var KEY=VALUE` take precedence over template defaults.
 
 ### `children` (optional)
 

@@ -8,6 +8,7 @@ BoilerSync templates must include a `template.json` file at the template root.
 
 - Inheritance: `extends` (or legacy `parent`)
 - Input metadata: `variables`, `options`
+- Template input defaults: `defaults`
 - Runtime behavior: `children`, `hooks`, `github`, `skip_git`
 
 Unknown keys are ignored by current CLI commands.
@@ -36,6 +37,12 @@ Unknown keys are ignored by current CLI commands.
       "description": "Enable CI workflow",
       "default": true
     }
+  },
+  "defaults": {
+    "api_package_name": "$${name_snake}_api",
+    "web_package_name": "$${name_kebab}-web",
+    "api_client_export_name": "$${name_camel}",
+    "with_frontend": true
   },
   "children": [
     {
@@ -105,6 +112,8 @@ Notes:
 
 - `variables` are also auto-discovered from `$${...}` usage in template files and `NAME_*` path placeholders.
 - Built-in naming variables such as `name_snake` and `name_pretty` are exposed through the normal variable/input flow.
+- If neither `--var name_snake=...` nor saved project metadata provides a name, BoilerSync infers `name_snake` from the target directory name.
+- A trailing `-workspace` / `_workspace` suffix is stripped during default project-name inference. For example, `woo-score-workspace` defaults to `name_snake=woo_score`.
 
 Relative `extends` values are resolved within the same template source repository. Example:
 
@@ -115,6 +124,46 @@ Relative `extends` values are resolved within the same template source repositor
 ```
 
 When used from `acme/templates#cli`, this resolves to `acme/templates#pip-package`.
+
+### `defaults`
+
+- Type: object keyed by interpolation variable name.
+- Purpose: Provide template-owned defaults before missing-variable collection.
+- Values: Scalars, arrays, and objects. String values support `$${...}` interpolation.
+- Precedence: Existing values win. BoilerSync does not overwrite values from explicit `--var` flags, saved `.boilersync` project metadata, or defaults already applied by an earlier template in the inheritance chain.
+- Persistence: Applied defaults are saved in generated project `.boilersync` metadata under `variables`.
+
+Example:
+
+```json
+{
+  "defaults": {
+    "api_package_name": "$${name_snake}_api",
+    "django_app_name": "$${name_snake}",
+    "web_package_name": "$${name_kebab}-web",
+    "api_client_package_name": "$${name_kebab}-api-client",
+    "api_client_export_name": "$${name_camel}",
+    "cdn_base_url": "https://cdn.openbase.app/$${name_kebab}/",
+    "with_frontend": true
+  }
+}
+```
+
+Defaults are the main mechanism for making a template usable with one non-interactive command:
+
+```bash
+mkdir my-app-workspace
+cd my-app-workspace
+boilersync init acme/templates#django-react-workspace --non-interactive
+```
+
+### Automatic Environment Defaults
+
+BoilerSync can populate a small set of variables from the local environment before prompting:
+
+- `github_user`: when a template references this variable and no value is already set, BoilerSync runs `gh api user --jq .login`.
+
+If automatic lookup fails, the variable remains missing. Interactive init prompts for it, while `--non-interactive` fails and asks for an explicit `--var github_user=...`.
 
 ### `children`
 
