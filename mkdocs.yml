@@ -1,6 +1,8 @@
 site_name: BoilerSync CLI
 site_description: BoilerSync CLI documentation
+site_url: https://boilersync.gabemontague.com
 repo_url: https://github.com/montaguegabe/boilersync
+use_directory_urls: false
 theme:
   name: mkdocs
 nav:
