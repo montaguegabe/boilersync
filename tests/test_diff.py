@@ -213,6 +213,34 @@ class TestDiff(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, result.output)
         self.assertIn("No divergence from template.", result.output)
 
+    def test_diff_ignores_claude_agents_compatibility_symlink(self) -> None:
+        _write_template(
+            self.template_root_dir,
+            org=self.org,
+            repo=self.repo,
+            subdir="agents-template",
+            files={"AGENTS.md.boilersync": "$${name_pretty} instructions\n"},
+            config={"skip_git": True},
+        )
+
+        target_dir = self.root / "agents-project"
+        target_dir.mkdir()
+        init(
+            self._template_ref("agents-template"),
+            target_dir=target_dir,
+            template_variables={
+                "name_snake": "agents_project",
+                "name_pretty": "Agents Project",
+            },
+            no_input=True,
+        )
+        (target_dir / "CLAUDE.md").symlink_to("AGENTS.md")
+
+        result = self._invoke_diff(target_dir, "--name-status")
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("No divergence from template.", result.output)
+
     def test_starter_files_are_excluded_by_default_and_included_on_request(
         self,
     ) -> None:

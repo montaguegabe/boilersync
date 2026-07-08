@@ -23,6 +23,20 @@ def is_default_copy_ignored(path: Path) -> bool:
     return any(part in DEFAULT_COPY_IGNORED_NAMES for part in path.parts)
 
 
+def is_agents_compatibility_symlink(root_dir: Path, path: Path) -> bool:
+    if path != Path("CLAUDE.md"):
+        return False
+
+    source = root_dir / path
+    if not source.is_symlink():
+        return False
+
+    try:
+        return source.readlink() == Path("AGENTS.md")
+    except OSError:
+        return False
+
+
 def git_visible_files(root_dir: Path) -> list[Path] | None:
     """Return git-visible file paths relative to root_dir, or None outside git.
 
@@ -66,6 +80,8 @@ def git_visible_files(root_dir: Path) -> list[Path] | None:
         path = Path(raw_path.decode("utf-8", errors="surrogateescape"))
         if path.is_absolute() or ".." in path.parts or is_default_copy_ignored(path):
             continue
+        if is_agents_compatibility_symlink(root_dir, path):
+            continue
         if (root_dir / path).is_file():
             paths.append(path)
     return paths
@@ -82,6 +98,8 @@ def copyable_project_files(root_dir: Path) -> list[Path]:
             continue
         relative_path = item.relative_to(root_dir)
         if is_default_copy_ignored(relative_path):
+            continue
+        if is_agents_compatibility_symlink(root_dir, relative_path):
             continue
         paths.append(relative_path)
     return paths
