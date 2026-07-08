@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 from boilersync.paths import paths
 
 SOURCE_RESOLUTION = "source_ref"
+DEFAULT_LEGACY_REPO_LOCATOR = "openbase-community/templates"
 REPO_RENAMES = {
     ("openbase-community", "openbase-boilerplate"): (
         "openbase-community",
@@ -168,7 +169,11 @@ def resolve_source_from_boilersync(
     if not isinstance(template_ref, str) or not template_ref.strip():
         raise ValueError("Template reference missing in .boilersync metadata.")
 
+    normalized_ref = template_ref.strip()
+    if "#" not in normalized_ref:
+        normalized_ref = f"{DEFAULT_LEGACY_REPO_LOCATOR}#{normalized_ref}"
+
     return resolve_template_source(
-        template_ref.strip(),
+        normalized_ref,
         clone_missing_repo=clone_missing_repo,
     )

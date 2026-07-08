@@ -4,7 +4,7 @@ description = "BoilerSync"
 authors = [{ name = "Gabe Montague", email = "gabemontague@outlook.com" }]
 dependencies = ["click>=8.2.0", "jinja2>=3.1.6", "GitPython>=3.1.44"]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dynamic = ["version"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -12,7 +12,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Topic :: Software Development :: Version Control :: Git",
 ]
 

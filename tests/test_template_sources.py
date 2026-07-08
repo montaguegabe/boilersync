@@ -97,6 +97,29 @@ class TestTemplateSources(unittest.TestCase):
         )
         self.assertEqual(source.template_dir, local_repo / "python/service-template")
 
+    def test_resolve_source_from_boilersync_accepts_legacy_short_ref(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            template_root_dir = Path(tmp)
+            local_repo = template_root_dir / "openbase-community" / "templates"
+            (local_repo / ".git").mkdir(parents=True)
+            (local_repo / "react-app").mkdir(parents=True)
+
+            with patch.dict(
+                os.environ,
+                {"BOILERSYNC_TEMPLATE_DIR": str(template_root_dir)},
+                clear=True,
+            ):
+                source = resolve_source_from_boilersync(
+                    template_ref="react-app",
+                    clone_missing_repo=False,
+                )
+
+        self.assertEqual(
+            source.ref,
+            "https://github.com/openbase-community/templates.git#react-app",
+        )
+        self.assertEqual(source.template_dir, local_repo / "react-app")
+
     def test_resolve_source_from_boilersync_requires_template_field(self):
         with self.assertRaises(ValueError):
             resolve_source_from_boilersync(template_ref=None, clone_missing_repo=False)

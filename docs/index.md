@@ -11,7 +11,10 @@ For command-level usage:
 ```bash
 boilersync --help
 boilersync init --help
+boilersync check-pull --help
+boilersync diff --help
 boilersync pull --help
+boilersync pull-proposal --help
 boilersync push --help
 boilersync templates --help
 ```

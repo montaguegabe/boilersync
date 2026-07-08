@@ -2,7 +2,7 @@ import json
 import re
 import shutil
 from pathlib import Path
-from typing import Any, Dict, Set
+from typing import Any, Callable, Dict, Set
 
 from jinja2 import FileSystemLoader
 
@@ -211,7 +211,10 @@ def apply_template_defaults(template_dir: Path) -> None:
 
 
 def copy_and_process_template(
-    source_dir: Path, target_dir: Path, context: Dict[str, Any]
+    source_dir: Path,
+    target_dir: Path,
+    context: Dict[str, Any],
+    on_file_copied: Callable[[Path, Path], None] | None = None,
 ) -> None:
     """Copy template directory and process all files and folders.
 
@@ -219,6 +222,8 @@ def copy_and_process_template(
         source_dir: Source template directory
         target_dir: Target directory to copy to
         context: Variables for interpolation
+        on_file_copied: Optional callback receiving the template source file and
+            final rendered destination file after interpolation and extension cleanup.
     """
 
     def process_item(src_path: Path, dst_path: Path) -> None:
@@ -235,10 +240,13 @@ def copy_and_process_template(
             final_dst_path = dst_path.parent / final_name
 
             # Copy the file
+            final_dst_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src_path, final_dst_path)
 
             # Process the file content with Jinja2
             process_template_file(final_dst_path, context)
+            if on_file_copied:
+                on_file_copied(src_path, final_dst_path)
 
         elif src_path.is_dir():
             # Interpolate the destination directory name

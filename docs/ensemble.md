@@ -34,6 +34,12 @@ boilersync init your-org/your-templates#python/service-template
 # Pull template updates later
 boilersync pull
 
+# Check local divergence from the current upstream template
+boilersync diff
+
+# Create a reviewable proposed pull in /tmp
+boilersync pull-proposal create
+
 # Push committed project changes back to template source
 boilersync push
 ```
@@ -75,18 +81,42 @@ Use for first-time project generation.
 
 ### `boilersync pull [TEMPLATE_REF]`
 
-Use to apply template changes into an existing project.
+Use to apply template changes directly into an existing project.
 
 - Uses nearest `.boilersync` when `TEMPLATE_REF` is omitted
 - Supports inheritance from `template.json` (`extends`/`parent`)
 - Excludes `.starter` files by default (`--include-starter` to include)
 - Pulls child projects by default (`--no-children` to skip)
+- For customized downstream projects, prefer `boilersync pull-proposal` so AI/manual review can apply only the useful files or hunks.
+
+### `boilersync diff`
+
+Use to inspect how the current project has diverged from its upstream template without opening an interactive review flow.
+
+- Renders the upstream template with the project's saved `.boilersync` variables before comparing
+- Shows diffstat output by default
+- Supports `--name-status`, `--patch`, and `--json`
+- Excludes files derived from `.starter` templates by default (`--include-starter` to include)
+- Excludes paths registered in `.boilersync` `children` from the parent diff
+- Supports `--children` for direct child project diffs and `--recursive` for descendants
+- Does not auto-detect framework-specific children; unregistered extra folders remain parent-project drift
+- Writes output to a file with `--output PATH`
+
+### `boilersync pull-proposal`
+
+Use when template updates need AI or manual review before touching the real project.
+
+- `boilersync pull-proposal create` copies the current project to a temp git repo, commits that state, runs `boilersync pull` in the copy, and leaves the proposed update as a git diff.
+- Add `--json` for agent-readable output including `proposal_dir` and changed files.
+- Inspect with `git -C PROPOSAL_DIR diff`.
+- Apply a whole file from the proposal with `boilersync pull-proposal apply-file PROPOSAL_DIR PATH`.
+- Apply selected hunks by saving a patch from the proposal diff and running `boilersync pull-proposal apply-patch PATCH`.
 
 ### `boilersync push`
 
 Use to promote committed project improvements back to template source.
 
-- Creates a comparison workspace for template/project diff review
+- Creates an interactive comparison workspace for template/project diff review
 - Copies only committed changes back into the template source
 - Supports `--add-files` for explicit additional file inclusion
 
@@ -102,7 +132,7 @@ Use to initialize the local template source cache.
 
 Use Desktop as the git-focused review and commit surface around CLI actions.
 
-1. Run `boilersync pull` or `boilersync push` from project roots.
+1. Run `boilersync pull`, `boilersync pull-proposal`, `boilersync diff`, or `boilersync push` from project roots.
 2. Open `boilersync-desktop` to inspect diffs across tracked repositories.
 3. Stage exact files/lines, commit, and push.
 4. Return to CLI for the next template lifecycle action.

@@ -8,10 +8,8 @@ from unittest.mock import patch
 from git import Repo
 
 from boilersync.commands.pull import get_template_inheritance_chain
-from boilersync.commands.push import (
-    copy_changed_files_to_template,
-    copy_template_chain_without_interpolation,
-)
+from boilersync.commands.push import copy_changed_files_to_template
+from boilersync.template_workspace import copy_template_chain_without_interpolation
 
 
 def _write_template(
@@ -29,7 +27,9 @@ def _write_template(
     template_dir.mkdir(parents=True, exist_ok=True)
 
     if config is not None:
-        (template_dir / "template.json").write_text(json.dumps(config), encoding="utf-8")
+        (template_dir / "template.json").write_text(
+            json.dumps(config), encoding="utf-8"
+        )
 
     for relative_path, contents in files.items():
         output_path = template_dir / relative_path
@@ -59,7 +59,9 @@ class TestPushInheritance(unittest.TestCase):
     def _template_ref(self, subdir: str) -> str:
         return f"{self.org}/{self.repo}#{subdir}"
 
-    def test_copy_changed_files_routes_parent_owned_files_to_parent_template(self) -> None:
+    def test_copy_changed_files_routes_parent_owned_files_to_parent_template(
+        self,
+    ) -> None:
         _write_template(
             self.template_root_dir,
             org=self.org,
@@ -99,10 +101,18 @@ class TestPushInheritance(unittest.TestCase):
         )
 
         parent_file = (
-            self.template_root_dir / self.org / self.repo / "parent" / "common.txt.boilersync"
+            self.template_root_dir
+            / self.org
+            / self.repo
+            / "parent"
+            / "common.txt.boilersync"
         )
         child_file = (
-            self.template_root_dir / self.org / self.repo / "child" / "common.txt.boilersync"
+            self.template_root_dir
+            / self.org
+            / self.repo
+            / "child"
+            / "common.txt.boilersync"
         )
 
         self.assertEqual(updated_files, ["common.txt"])
@@ -157,7 +167,9 @@ class TestPushInheritance(unittest.TestCase):
                 inheritance_chain[-1],
             )
 
-        self.assertIn("Refusing to push files derived from block-based", str(cm.exception))
+        self.assertIn(
+            "Refusing to push files derived from block-based", str(cm.exception)
+        )
 
 
 if __name__ == "__main__":

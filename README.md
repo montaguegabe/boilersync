@@ -30,7 +30,13 @@ boilersync init your-org/your-templates#python/service-template --non-interactiv
 # 3) Pull template updates into the current project when needed
 boilersync pull
 
-# 4) Push committed project changes back into the template source
+# 4) Check project divergence from the current template
+boilersync diff
+
+# 5) Create a reviewable pull proposal without mutating the project
+boilersync pull-proposal create
+
+# 6) Push committed project changes back into the template source
 boilersync push
 ```
 
@@ -39,7 +45,11 @@ boilersync push
 - `boilersync init TEMPLATE_REF`: create a project from a template (empty target directory).
 - `boilersync init TEMPLATE_REF --non-interactive`: create a project without prompts when defaults and automatic values cover all inputs.
 - `boilersync check-pull`: compare the project's recorded template repo commit against the current cached template repo HEAD.
+- `boilersync diff`: render the upstream template with the project's saved variables and show how the current project has diverged.
 - `boilersync pull [TEMPLATE_REF]`: apply template updates to an existing project.
+- `boilersync pull-proposal create`: create a temp git repo containing proposed pull changes for review.
+- `boilersync pull-proposal apply-file PROPOSAL_DIR PATH`: copy one proposed file into the current project.
+- `boilersync pull-proposal apply-patch PATCH`: apply selected hunks from a saved patch.
 - `boilersync push`: review and copy committed project changes back to the template.
 - `boilersync templates init`: clone a template source repository into the local cache.
 
@@ -49,7 +59,9 @@ Use command help for full flags:
 boilersync --help
 boilersync init --help
 boilersync check-pull --help
+boilersync diff --help
 boilersync pull --help
+boilersync pull-proposal --help
 boilersync push --help
 boilersync templates --help
 ```

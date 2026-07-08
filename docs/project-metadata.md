@@ -4,6 +4,8 @@ BoilerSync writes a `.boilersync` file in the project root after `boilersync ini
 
 This file is the source of truth for template provenance and saved interpolation inputs.
 
+BoilerSync writes this file as indented JSON with a trailing newline.
+
 ## Schema
 
 ```json
@@ -65,10 +67,12 @@ This file is the source of truth for template provenance and saved interpolation
 ### `children` (optional)
 
 - Type: `string[]`
-- Purpose: relative paths to child projects for recursive pull behavior.
+- Purpose: relative paths to explicit child BoilerSync projects.
 - Notes:
   - Paths are relative to the directory containing `.boilersync`.
   - Field is present when child projects are registered.
+  - Parent diffs exclude registered child paths so each template instantiation is compared against its own upstream template.
+  - BoilerSync does not infer children from framework conventions, package names, or folder names. Unregistered extra folders remain part of the parent project diff.
 
 ## Validation Rules
 
