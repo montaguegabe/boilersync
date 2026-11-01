@@ -52,6 +52,8 @@ boilersync push
 - `boilersync pull-proposal apply-patch PATCH`: apply selected hunks from a saved patch.
 - `boilersync push`: review and copy committed project changes back to the template.
 - `boilersync templates init`: clone a template source repository into the local cache.
+- `boilersync skills install`: install the BoilerSync agent skills for Codex and Claude Code with `npx skills add`.
+- `boilersync skills install --dev`: symlink a local `boilersync-skills` checkout into `~/.agents/skills` and `~/.claude/skills` by running its `scripts/install-dev.sh`, so skill edits are live.
 
 Use command help for full flags:
 
@@ -64,6 +66,7 @@ boilersync pull --help
 boilersync pull-proposal --help
 boilersync push --help
 boilersync templates --help
+boilersync skills install --help
 ```
 
 ## Template References

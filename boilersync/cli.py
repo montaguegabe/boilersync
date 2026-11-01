@@ -8,6 +8,7 @@ from boilersync.commands.init import init_cmd
 from boilersync.commands.pull import pull_cmd
 from boilersync.commands.pull_proposal import pull_proposal_cmd
 from boilersync.commands.push import push_cmd
+from boilersync.commands.skills import skills_cmd, skills_install_cmd
 from boilersync.commands.templates import templates_cmd
 
 
@@ -40,6 +41,8 @@ main.add_command(common_command_wrapper(pull_cmd))
 main.add_command(pull_proposal_cmd)
 main.add_command(common_command_wrapper(push_cmd))
 main.add_command(templates_cmd)
+skills_cmd.add_command(common_command_wrapper(skills_install_cmd))
+main.add_command(skills_cmd)
 
 
 if __name__ == "__main__":
